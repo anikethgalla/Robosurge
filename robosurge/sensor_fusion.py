@@ -81,7 +81,7 @@ logger = logging.getLogger("SensorFusion")
 # Constants
 # ---------------------------------------------------------------------------
 
-SERIAL_PORT:    str   = "COM6"
+SERIAL_PORT:    str   = "COM5"   # CP210x USB-UART; COM6/COM7 are Bluetooth here
 SERIAL_BAUD:    int   = 115200
 SERIAL_TIMEOUT: float = 0.02     # 20 ms write timeout — keeps the loop non-blocking
 LOOP_RATE_HZ:   float = 10.0

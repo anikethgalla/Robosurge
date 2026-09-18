@@ -81,7 +81,10 @@ from .vision_pipeline import PoseTracker
 
 from .landmark_detector import LandmarkDetector, LandmarkFrame
 from .scene_state import SceneState, ArmState, LandmarkState, TABLE_Z_CM, SAFE_Z_CM
-from .surgical_agent import ArmPlan, SurgicalAgent, ProcedurePlan, SurgicalAgentError, Waypoint
+from .surgical_agent import (
+    ArmPlan, SurgicalAgent, ProcedurePlan, SurgicalAgentError, Waypoint,
+    CAUTERIZATION_DWELL_S, SUTURE_CINCH_DWELL_S, DEFAULT_SUTURE_STITCHES,
+)
 from .procedure_validator import ProcedureValidator
 from .motion_executor import MotionExecutor, HOME_X, HOME_Y, HOME_Z
 from .kinematics_engine import ForwardKinematics
@@ -104,6 +107,10 @@ _DIM  = "\033[2m"
 TOOL_OFFSET_FILE = Path(__file__).resolve().parents[1] / "config" / "tool_offset.json"
 ROBOT_CALIBRATION_FILE = Path(__file__).resolve().parents[1] / "config" / "robot_calibration.json"
 MODELS_DIR = Path(__file__).resolve().parents[1] / "models"
+
+# Debug snapshot of the live camera frame, refreshed at most this often.
+SNAPSHOT_PATH: str = "live_calib_check.png"
+SNAPSHOT_INTERVAL_S: float = 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -164,6 +171,7 @@ class VisionThread(threading.Thread):
         self._interval    = 1.0 / loop_hz
         self._stop_event  = threading.Event()
         self._frame_count = 0
+        self._last_snapshot_t = 0.0
 
     def stop(self) -> None:
         self._stop_event.set()
@@ -182,9 +190,21 @@ class VisionThread(threading.Thread):
 
     def _tick(self) -> None:
         frame = self._tracker.grab_frame()
-        cv2.imwrite('live_calib_check.png', frame)
+
+        # Debug snapshot for eyeballing calibration against the live scene.
+        # This used to run unconditionally, i.e. a full PNG encode + disk write
+        # on every frame at the loop rate — and it passed frame=None straight
+        # to cv2.imwrite whenever a grab failed, raising once per tick. Once a
+        # second is plenty to inspect, and the guard keeps a dropped frame from
+        # turning into an error storm.
+        if frame is not None:
+            now = time.monotonic()
+            if now - self._last_snapshot_t >= SNAPSHOT_INTERVAL_S:
+                cv2.imwrite(SNAPSHOT_PATH, frame)
+                self._last_snapshot_t = now
+
         if self._frame_count <= 3:
-            logger.warning("LIVE FRAME SHAPE: %s", None if frame is None else frame.shape)
+            logger.debug("Live frame shape: %s", None if frame is None else frame.shape)
         self._frame_count += 1
 
         # ── Arm detection ────────────────────────────────────────────────
@@ -601,7 +621,6 @@ def _repair_biopsy_plan(command: str, state: SceneState, plan: ProcedurePlan) ->
 
 def _repair_cauterization_plan(command: str, state: SceneState, plan: ProcedurePlan) -> ProcedurePlan:
     """Cauterization: shallow contact, held for CAUTERIZATION_DWELL_S."""
-    from surgical_agent import CAUTERIZATION_DWELL_S
     return _repair_point_procedure_plan(
         command, state, plan, "cauterization",
         depth_cm=0.1, dwell_s=CAUTERIZATION_DWELL_S,
@@ -678,8 +697,6 @@ def _repair_suturing_plan(command: str, state: SceneState, plan: ProcedurePlan) 
       stitch_depth_cm   = 0.15  (how far below the table the tip dips)
       loop_height_cm    = 0.8   (how high the arc rises above the table)
     """
-    from surgical_agent import SUTURE_CINCH_DWELL_S, DEFAULT_SUTURE_STITCHES
-
     if plan.procedure != "suturing":
         return plan
 
