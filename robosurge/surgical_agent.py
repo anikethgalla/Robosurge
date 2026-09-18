@@ -72,7 +72,7 @@ logger = logging.getLogger("SurgicalAgent")
 # Constants
 # ---------------------------------------------------------------------------
 
-GROQ_MODEL:  str = "llama-3.3-70b-versatile"
+GROQ_MODEL:  str = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
 MAX_TOKENS:  int = 2048
 TEMPERATURE: float = 0.0    # deterministic — surgical planning is not creative
 MAX_RETRIES: int = 3
