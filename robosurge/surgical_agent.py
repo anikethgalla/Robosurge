@@ -74,13 +74,8 @@ logger = logging.getLogger("SurgicalAgent")
 # Constants
 # ---------------------------------------------------------------------------
 
-<<<<<<< HEAD
 GROQ_MODEL:  str = "openai/gpt-oss-120b"
 MAX_TOKENS:  int = 8192   # gpt-oss reasoning tokens count toward this budget
-=======
-GROQ_MODEL:  str = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
-MAX_TOKENS:  int = 2048
->>>>>>> caad100b1ce0a3de4df43cf17747323557f180be
 TEMPERATURE: float = 0.0    # deterministic — surgical planning is not creative
 MAX_RETRIES: int = 3
 

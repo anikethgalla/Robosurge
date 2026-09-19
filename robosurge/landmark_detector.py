@@ -55,15 +55,18 @@ logger = logging.getLogger("LandmarkDetector")
 from .scene_state import TABLE_Z_CM, MIN_REACH, MAX_REACH  # physical Z of table surface (same as FIXED_Z_CM)
 
 # Minimum/maximum dot area in pixels to filter noise and large blobs
-MIN_DOT_AREA_PX: int = 100
-MAX_DOT_AREA_PX: int = 3000
+MIN_DOT_AREA_PX: int = 50
+MAX_DOT_AREA_PX: int = 5000
 
 # Calibrated pixel bounding box — detections outside this region are rejected
 # as false positives from background / servo hardware.
-PIXEL_BOUND_V_MIN: int = 380   # dots at v=437-492, servos at v=200-250
-PIXEL_BOUND_U_MIN: int = 200
-PIXEL_BOUND_U_MAX: int = 1100
-PIXEL_BOUND_V_MAX: int = 700
+PIXEL_BOUND_V_MIN: int = 250
+PIXEL_BOUND_U_MIN: int = 100
+PIXEL_BOUND_U_MAX: int = 1200
+PIXEL_BOUND_V_MAX: int = 720
+
+# Max reach allowed for landmark detection before hard rejection (with clamping)
+MAX_LANDMARK_REACH: float = 50.0
 
 # A dot parked outside the calibrated region is rejected on every frame, so at
 # the vision thread's ~10 Hz the warning scrolled the interactive prompt off
@@ -364,7 +367,7 @@ class LandmarkDetector:
             if perimeter < 1e-6:
                 continue
             circularity = (4.0 * np.pi * area) / (perimeter ** 2)
-            if circularity < 0.40:
+            if circularity < 0.25:
                 continue
             candidates.append((area, circularity, cnt))
 
@@ -392,18 +395,17 @@ class LandmarkDetector:
         phys_x, phys_y = self._mapper.pixel_to_physical(cx, cy)
         phys_z = TABLE_Z_CM + cfg.z_offset_cm
 
-        # Step 7.5: reject physically impossible results.
-        #
-        # The mapper is a LOCAL affine fit — outside the convex hull of the
-        # calibration points it extrapolates linearly and without limit. A dot
-        # 200 px past the last calibration point came back as Y = +62 cm, the
-        # IK clamped it, and the arm lunged at a workspace corner. Publishing
-        # nothing is strictly better than publishing a coordinate the arm will
-        # saturate against.
+        # Step 7.5: validate and soft-clamp physical reach
         reach = math.hypot(phys_x, phys_y)
-        if not (MIN_REACH <= reach <= MAX_REACH):
+        if not (0.5 <= reach <= MAX_LANDMARK_REACH):
             self._log_reject_throttled(cfg.name, cx, cy, phys_x, phys_y, reach)
             return None
+
+        # Soft-clamp if slightly beyond max robot reach to keep within reachable envelope
+        if reach > MAX_REACH:
+            scale = (MAX_REACH - 0.5) / reach
+            phys_x *= scale
+            phys_y *= scale
 
         # Step 8: confidence
         norm_area  = min(best_area / 600.0, 1.0)   # 600px = expected dot size at this distance

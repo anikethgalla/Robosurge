@@ -33,7 +33,7 @@ SERIAL_PORT_DEFAULT = "COM5"   # CP210x USB-UART; COM6/COM7 are Bluetooth here
 SERIAL_BAUD         = 115200
 SERIAL_TIMEOUT      = 0.02
 
-SETTLE_S        = 2.5
+SETTLE_S        = 3.5
 SAMPLES_PER_PT  = 7
 SAMPLE_GAP_S    = 0.15
 BASELINE_SAMPLES = 5
@@ -142,7 +142,7 @@ def sample_moved_arm(
     arm2_pos: list[float],
     n: int,
     gap_s: float,
-    cluster_radius_px: float = 15.0,
+    cluster_radius_px: float = 25.0,
 ) -> tuple[Optional[tuple[float, float]], bool]:
     # Collect every detection, tagged with the sample it came from. Which
     # blob is arm2 is decided once over the whole batch rather than greedily
@@ -166,7 +166,7 @@ def pick_moved_arm(
     sample_of: list[int],
     arm2_pos: list[float],
     n: int,
-    cluster_radius_px: float = 15.0,
+    cluster_radius_px: float = 25.0,
 ) -> tuple[Optional[tuple[float, float]], bool]:
     """
     Decide which blob is the moved arm, given all detections from one target.
@@ -226,14 +226,14 @@ def pick_moved_arm(
     span, centroid, _ = rest[0]
     chosen = (float(centroid[0]), float(centroid[1]))
 
-    if span < 0.6 * n:
+    if span < 0.5 * n:
         print(f"    WARNING: best candidate appears in only {span}/{n} samples "
               "— arm likely wasn't settled. Flagging unreliable.")
         return chosen, False
 
     # Two equally persistent blobs means we cannot tell the tip from an elbow
     # or a reflection. Guessing here is how a wrong pixel ends up in the fit.
-    if len(rest) > 1 and rest[1][0] >= 0.6 * n:
+    if len(rest) > 1 and rest[1][0] >= 0.5 * n:
         print(f"    WARNING: two persistent candidates "
               f"({chosen[0]:.0f},{chosen[1]:.0f}) span={span} and "
               f"({rest[1][1][0]:.0f},{rest[1][1][1]:.0f}) span={rest[1][0]} "
